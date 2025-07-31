@@ -1,0 +1,263 @@
+# EACH SEGMENT IS A SCRIPT IN THE TOTAL PIPELINE AS PER THE INTRUCTIONS TAB
+# NAME YOUR FILES AS PER INTRUCTIONS 
+
+
+
+#############################PATHS .CONFIG FILE######################################### 
+
+FASTA=/path/to/genome.fa
+GTF=/path/to/genome.gtf
+DATA_DIR=/pathw/to/fastq
+OUT_DIR=/path/to dir
+
+
+
+###############################SAMPLE FILE################################
+
+sample_L001_
+
+
+#################################CHECK READ LENGTH FILE ##################################
+#!/bin/bash
+
+# Usage: ./check_read_length.sh /path/to/fastq.gz
+
+if [[ $# -ne 1 ]]; then
+  echo "Usage: $0 <fastq.gz file>"
+  exit 1
+fi
+
+FILE=$1
+
+if [[ ! -f "$FILE" ]]; then
+  echo "ERROR: File not found: $FILE"
+  exit 1
+fi
+
+# Extract the first read sequence and measure its length
+READ_LEN=$(zcat "$FILE" | awk 'NR==2 { print length($0); exit }')
+
+echo "Detected read length: $READ_LEN"
+echo "Recommended --sjdbOverhang: $((READ_LEN - 1))"
+
+
+
+
+######################################STAR MAP INDEX.SL FILE ######################################
+#!/bin/bash
+#SBATCH --job-name=STARIdx          # Job name
+#SBATCH --output=logs/star_index_%j.out     # Job output file
+#SBATCH --error=logs/star_index_%j.err       #Job error output
+#SBATCH --time=10:15:0
+#SBATCH --ntasks=12
+#SBATCH --mem=64G
+
+module purge
+module load bluebear
+module load bear-apps/2022b
+module load STAR/2.7.11a-GCC-12.2.0
+
+FASTA=$1
+GTF=$2
+OUTDIR=$3
+
+mkdir -p "$(dirname "$SLURM_OUTPUT")"
+mkdir -p "$OUTDIR"
+
+if [[ ! -f "$FASTA" ]]; then
+  echo "ERROR: FASTA file not found: $FASTA"
+  exit 1
+fi
+
+if [[ ! -f "$GTF" ]]; then
+  echo "ERROR: GTF file not found: $GTF"
+  exit 1
+fi
+
+echo "Building STAR index..."
+STAR --runThreadN 8 \
+     --runMode genomeGenerate \
+     --genomeDir "$OUTDIR" \
+     --genomeFastaFiles "$FASTA" \
+     --sjdbGTFfile "$GTF" \
+     --sjdbOverhang 99
+
+echo "STAR index build completed."
+
+
+
+#STAR SOLO
+#!/bin/bash
+#SBATCH --job-name=STARsolo          # Job name
+#SBATCH --output=logs/star_%x_%j.out     # Job output file
+#SBATCH --error=logs/star_%x_%j.err       #Job error output
+#SBATCH --time=10:15:0
+#SBATCH --nodes=1
+#SBATCH --ntasks=16
+#SBATCH --mem=128G
+
+module purge
+module load bluebear
+module load bear-apps/2022b
+module load STAR/2.7.11a-GCC-12.2.0
+
+# Input arguments
+SAMPLE=$1         # e.g., GB070223-CSMW-S2_S2
+DATA_DIR=$2       # Directory containing all FASTQs
+OUTDIR=$3         # Output for this sample
+INDEX_DIR=$4      # STAR index directory
+
+# Prepare output directories
+mkdir -p logs
+mkdir -p "$OUTDIR"
+
+# Locate matching FASTQ files
+R1_FILES=($(find "$DATA_DIR" -name "${SAMPLE}_L*_R1_001.fastq.gz" | sort))
+R2_FILES=($(find "$DATA_DIR" -name "${SAMPLE}_L*_R2_001.fastq.gz" | sort))
+
+if [[ ${#R1_FILES[@]} -eq 0 || ${#R2_FILES[@]} -eq 0 ]]; then
+  echo "ERROR: No FASTQ files found for $SAMPLE"
+  exit 1
+fi
+
+# Comma-separated lists for STAR
+R1_CSV=$(IFS=, ; echo "${R1_FILES[*]}")
+R2_CSV=$(IFS=, ; echo "${R2_FILES[*]}")
+
+# Run STARsolo with comma-separated files
+echo "Running STARsolo for $SAMPLE using ${#R1_FILES[@]} lane(s)..."
+STAR --genomeDir "$INDEX_DIR" \
+     --readFilesIn "$R2_CSV" "$R1_CSV" \
+     --outSAMtype BAM SortedByCoordinate \
+     --readFilesCommand zcat \
+     --runThreadN 16 \
+     --soloType CB_UMI_Simple \
+     --soloCBstart 1 --soloCBlen 16 \
+     --soloUMIstart 17 --soloUMIlen 12 \
+     --soloFeatures Gene \
+     --soloCBwhitelist None \
+     --soloBarcodeReadLength 0 \
+     --outFileNamePrefix "$OUTDIR/${SAMPLE}_"
+
+echo "STARsolo completed for $SAMPLE."
+
+
+
+
+
+
+############################## RUN_SCRNA_PIPELINE.SH ####################################
+
+
+
+
+#!/bin/bash
+
+set -euo pipefail
+
+# ----------------------------
+# Help Menu
+# ----------------------------
+usage() {
+  echo "Usage: $0 -c config_file -s sample_list"
+  echo ""
+  echo "Options:"
+  echo "  -c    Path to config file (e.g., paths.config)"
+  echo "  -s    Path to sample list file (e.g., sample_list.txt)"
+  echo "  -h    Show this help message"
+  echo ""
+  echo "Config file must contain paths for:"
+  echo "  FASTA=...         # Reference genome in FASTA format"
+  echo "  GTF=...           # Gene annotation in GTF format"
+  echo "  DATA_DIR=...      # Directory containing FASTQ files"
+  echo "  OUT_DIR=...       # Output directory for STARsolo output"
+  exit 1
+}
+
+# Parse Arguments
+while getopts "c:s:h" opt; do
+  case $opt in
+    c) CONFIG=$OPTARG ;;
+    s) SAMPLE_LIST=$OPTARG ;;
+    h) usage ;;
+    *) usage ;;
+  esac
+done
+
+if [[ -z "${CONFIG:-}" || -z "${SAMPLE_LIST:-}" ]]; then
+  usage
+fi
+
+# Load Config
+source "$CONFIG"
+
+# Validate required paths
+for var in FASTA GTF DATA_DIR OUT_DIR; do
+  if [[ -z "${!var:-}" ]]; then
+    echo "ERROR: $var not set in config file."
+    exit 1
+  fi
+  if [[ "$var" =~ ^(FASTA|GTF)$ && ! -f "${!var}" ]]; then
+    echo "ERROR: File not found: ${!var}"
+    exit 1
+  fi
+  if [[ "$var" =~ ^(DATA_DIR|OUT_DIR)$ && ! -d "${!var}" ]]; then
+    echo "ERROR: Directory not found: ${!var}"
+    exit 1
+  fi
+done
+
+# Create logs dir if needed
+mkdir -p logs
+
+# Check if STAR index exists, if not build it
+INDEX_DIR="${OUT_DIR}/STAR_index"
+if [[ ! -d "$INDEX_DIR" ]]; then
+  echo "STAR index not found. Building index..."
+  sbatch pipe_scripts/STARMap_Idx.sl "$FASTA" "$GTF" "$INDEX_DIR"
+  echo "Index job submitted. Please re-run the pipeline after it finishes."
+  exit 0
+fi
+
+# Extract sample names
+SAMPLES=($(cat "$SAMPLE_LIST"))
+echo "Found ${#SAMPLES[@]} samples."
+
+# Submit one SLURM job per sample
+for SAMPLE in "${SAMPLES[@]}"; do
+  echo "Submitting job for sample: $SAMPLE"
+  sbatch pipe_scripts/STARsolo_V1.1.sl "$SAMPLE" "$DATA_DIR" "$OUT_DIR/$SAMPLE" "$INDEX_DIR"
+done
+
+echo "All jobs submitted."
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
