@@ -1,0 +1,1098 @@
+
+THESE ARE EXAMPLES OF CLUSTERING AND SUBCLUSTERING OF IMMUNE CELLS
+
+
+
+---
+title: "Untitled"
+date: "2025-07-01"
+output: html_document
+---
+
+```{r}
+library(Seurat)
+library (scater)
+library(tidyverse)
+library(dplyr)
+library(R.utils)
+library(ggplot2)
+library(ggpubr)
+
+```
+
+
+###############   DOUBLET FINDER - REMOVE DOUBLETS FIRST ################# 
+
+```{r}
+merged_samples<- readRDS("file path to merged samples ")
+
+merged_samples@meta.data
+
+VlnPlot(merged_samples, group.by = 'Sample.ID', split.by = "doublet_finder",
+        features = c("nFeature_RNA", "nCount_RNA", "percent_mt", "percent_ribo", "percent_hb"), 
+        ncol = 3, pt.size = 0) + theme(legend.position = 'right')
+
+merged_samples <- subset(merged_samples, subset = doublet_finder == "Singlet")
+```
+
+```{r}
+
+
+#rid of cells more than 5% mitochondrial content (dead/ damaged cells)
+
+
+merged_samples[["percent.mt"]] <- PercentageFeatureSet(merged_samples, pattern = "^mt-")
+# 2. filter out cells with >5% mitochondrial content
+merged_samples <- subset(
+  merged_samples,
+  subset = nFeature_RNA > 200 &        
+           nFeature_RNA < 6000 &      # capped genes according to pca
+           percent.mt   < 5           # drop cells above 5% mito
+)
+
+
+head(merged_samples@meta.data)
+
+
+
+VlnPlot(
+  merged_samples,
+  group.by = 'Sample.ID',
+  features = c("percent.mt"),
+  ncol = 3,
+  pt.size = 0
+) + theme(legend.position = 'right')
+
+
+```
+
+```{r}
+#cell count 
+table(merged_samples$stim)      
+table(merged_samples$orig.ident)
+
+```
+
+
+
+
+
+
+#############   PROCESS AGAIN ###############
+
+
+```{r}
+# NormaliSe merged data
+merged_samples <- NormalizeData(merged_samples)
+
+
+##############################################################################################
+
+# Identify variable features
+merged_samples <- FindVariableFeatures(merged_samples)
+plot1 <-VariableFeaturePlot(merged_samples) 
+plot2 <- LabelPoints(plot = plot1, points = head(VariableFeatures(merged_samples), 10), repel = TRUE)
+# Add axis labels and title
+plot2 + 
+  labs(
+    x = "Average Expression",
+    y = "Standardised Variance",
+    title = "Highly Variable Features"
+  ) +
+  theme_bw()
+
+
+##############################################################################################
+
+# Scale the data
+merged_samples <- ScaleData(merged_samples)
+
+
+# 1. Run PCA  
+merged_samples <- RunPCA(
+  merged_samples,
+  features = VariableFeatures(merged_samples),   # typically ~2–3 k genes
+  verbose  = FALSE
+)
+
+# 2. examine the elbow plot to decide how many PCs matter
+ElbowPlot(merged_samples, ndims = 20)          
+
+# 3. Cluster the cells 
+merged_samples <- FindNeighbors(merged_samples, dims = 1:20)  
+merged_samples <- FindClusters(merged_samples, resolution = 0.5)
+
+
+```
+```{r}
+##############################################################################################
+# PCA
+merged_samples <- RunPCA(merged_samples)
+ElbowPlot(merged_samples)
+
+
+#not clear elbowing- couple techniques for finding minimum PC to use :
+
+
+ stdv <- merged_samples[["pca"]]@stdev
+  percent_stdv <- (stdv/sum(stdv)) * 100
+  cumulative <- cumsum(percent_stdv)
+  co1 <- which(cumulative > 90 & percent_stdv < 5)[1] 
+  co2 <- sort(which((percent_stdv[1:length(percent_stdv) - 1] - 
+                       percent_stdv[2:length(percent_stdv)]) > 0.1), 
+              decreasing = T)[1] + 1
+  min_pc <- min(co1, co2)
+
+min_pc # chosen PC value = 16
+
+##############
+stdv <- merged_samples[["pca"]]@stdev
+percent_stdv <- (stdv^2/sum(stdv^2)) * 100  
+cumulative <- cumsum(percent_stdv)
+
+# Print variance for first few PCs
+cat("Variance explained by first 5 PCs:\n")
+for(i in 1:5) {
+  cat(sprintf("PC%d: %.2f%% (Cumulative: %.2f%%)\n", i, percent_stdv[i], cumulative[i]))
+}
+
+library(ggplot2)
+library(gridExtra)
+
+pc_data <- data.frame(
+  PC = 1:length(percent_stdv),
+  Individual_Variance = percent_stdv,
+  Cumulative_Variance = cumulative
+)
+
+p1 <- ggplot(pc_data[1:20,], aes(x = PC, y = Individual_Variance)) +
+  geom_bar(stat = "identity", fill = "lightblue", alpha = 0.7) +
+  geom_hline(yintercept = 5, color = "red", linetype = "dashed", alpha = 0.7) +
+  labs(title = "Individual Variance Explained by Each PC",
+       x = "Principal Component",
+       y = "Variance Explained (%)") +
+  theme_minimal() +
+  annotate("text", x = 15, y = 6, label = "5% threshold", color = "red", size = 3)
+
+
+plot(p1)
+
+
+
+#choosing PC16 going forward eventhough below 5% threshold due to key genes that may be lowly expressed/not impacting variance but important for specific clustering 
+
+###########################################################################################
+
+
+
+
+# Clustering
+merged_samples <- FindNeighbors(merged_samples, dims = 1:16)
+merged_samples <- FindClusters(merged_samples, resolution = 0.6)
+
+
+
+###########################################################################################
+
+
+# UMAP
+merged_samples <- RunUMAP(merged_samples, dims = 1:16)
+DimPlot(object = merged_samples, reduction = "umap")
+
+
+```
+
+```{r}
+# Check for the expression of different markers
+expression_p1 <- DotPlot(merged_samples, c("Cxcl10", "Elane", "Mpo"))
+expression_p2 <- FeaturePlot(merged_samples, c("Cxcl10", "Elane", "Mpo"))
+expression_p1 | expression_p2
+```
+
+
+
+
+
+
+############################### DGE ANALYSIS  ########################################
+
+
+
+
+
+```{r}
+Idents(merged_samples) <- 'RNA_snn_res.0.6'
+DimPlot(object = merged_samples, reduction = "umap")
+merged_samples <- JoinLayers(merged_samples)
+
+#dge_all <- FindAllMarkers(
+#merged_samples,
+ #only.pos = FALSE,   # see both up and down reg genes
+  #min.pct = 0.25,
+  #logfc.threshold = 0.25)
+
+
+
+#saveRDS(dge_all,file="all_markers_dge .rds")
+#write.csv(merged_samples, "merged samples cluster analysis", row.names = FALSE)
+
+
+#dge_all %>% group_by(cluster) %>%
+ # arrange(desc(avg_log2FC), p_val) %>%
+  #slice_head(n = 5) %>%
+  #print(n = 50)
+
+```
+
+###### Visualise (volcano plots) ######
+
+
+
+```{r}
+#library(EnhancedVolcano)
+```
+
+```{r}
+
+#dge_significant <- dge_all %>%
+ # filter(p_val_adj < 0.05,          # significant p-value
+  #       abs(avg_log2FC) > 0.25,    # fold change threshold
+   #      pct.1 > 0.25)              # minimum percentage threshold
+
+#dge_significant %>% 
+ # group_by(cluster) %>% 
+  #summarise(n_genes = n()) %>%
+  #print()
+
+```
+
+```{r}
+######## VOLCANO PLOTS ###############
+
+
+
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+
+
+merged_samples@meta.data
+
+
+
+Idents(merged_samples) <- "seurat_clusters"  # make sure clustering is set
+
+# Get unique clusters
+clusters <- levels(merged_samples)
+
+# Loop through each cluster
+for (clust in clusters) {
+  
+  message("Processing cluster: ", clust)
+  
+  # Subset to the current cluster
+  cluster_cells <- subset(merged_samples, idents = clust)
+  
+  # Perform differential expression between stim groups
+  markers <- FindMarkers(
+    cluster_cells,
+    group.by = "stim",
+    ident.1 = "control",      # adapt to your actual levels if different
+    ident.2 = "PEPITEM",
+    logfc.threshold = 0,
+    min.pct = 0.1
+  )
+  
+  # Add gene column
+  markers$gene <- rownames(markers)
+  
+  # Volcano plot
+  volcano <- ggplot(markers, aes(x = avg_log2FC, y = -log10(p_val_adj))) +
+    geom_point(aes(color = (p_val_adj < 0.05 & abs(avg_log2FC) > 0.25)), alpha = 0.6) +
+    scale_color_manual(values = c("grey", "red")) +
+    geom_vline(xintercept = c(-0.25, 0.25), linetype = "dashed") +
+    geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
+    theme_minimal() +
+    labs(
+      title = paste("Volcano Plot - Cluster", clust, "(control vs PEPITEM)"),
+      x = "Log2 Fold Change",
+      y = "-Log10 Adjusted P-value",
+      color = "Significant"
+    )
+  
+  print(volcano)
+  
+  # Optional: Save the plot
+  # ggsave(paste0("volcano_cluster_", clust, ".png"), volcano, width = 6, height = 5)
+}
+
+
+
+
+```
+
+
+################## IMMUNE CELL ANNOTATION ###############
+
+              # broad annotation + validation 
+
+
+```{r}
+#if (!requireNamespace("SingleR", quietly = TRUE))
+   # BiocManager::install("SingleR")
+#if (!requireNamespace("celldex", quietly = TRUE))
+ #   BiocManager::install("celldex")
+#if (!requireNamespace("MouseGastrulationData", quietly = TRUE))
+  #  BiocManager::install("MouseGastrulationData")
+
+library(SingleR)
+library(celldex)
+
+# Different reference datasets
+mouse_ref <- MouseRNAseqData()  # General mouse reference
+immgen_ref <- ImmGenData()      # ImmGen mouse immune reference
+
+
+#IMM GEN ANNOTATION 
+# automated annotation
+
+# Updated code for automated annotation
+predictions <- SingleR(test = GetAssayData(merged_samples, assay = "RNA", layer = "data"),
+                      ref = immgen_ref,
+                      labels = immgen_ref$label.main)
+
+merged_samples$SingleR_labels <- predictions$labels
+merged_samples$SingleR_scores <- predictions$scores
+```
+```{r}
+#visualise
+DimPlot(merged_samples, group.by = "SingleR_labels", label = TRUE, pt.size = 0.5)
+
+# Check the annotation results
+table(merged_samples$SingleR_labels)
+
+# Compare with  original clusters
+table(merged_samples$seurat_clusters, merged_samples$SingleR_labels)
+```
+
+```{r}
+#General mouse ANNOTATION -for validation of clusters
+# automated annotation
+predictions_2 <- SingleR(test = GetAssayData(merged_samples, assay = "RNA", slot = "data"),
+                      ref = mouse_ref,
+                      labels = mouse_ref$label.main)
+
+
+merged_samples$SingleR_labels_2 <- predictions_2$labels
+merged_samples$SingleR_scores_2 <- predictions_2$scores
+
+
+#visualise
+DimPlot(merged_samples, group.by = "SingleR_labels_2", label = TRUE, pt.size = 0.5, repel = TRUE)
+  
+DimPlot(merged_samples, group.by = "stim", cols = c("control" = "red", "PEPITEM" = "blue",alpha =1,pt.size= 0.2))
+DimPlot(merged_samples, group.by = "stim", cols = c("control" = "blue", "PEPITEM" = "red",alpha =1,pt.size= 0.2))
+```
+
+
+
+############## SUB CLUSTERING  MACROPHAGES #############
+
+        # Subtype clustering 
+
+
+```{r}
+
+table(merged_samples$SingleR_labels)
+
+# Subset macrophages 
+macrophages <- subset(merged_samples, subset = SingleR_labels %in% c("Macrophages", "Monocytes"))
+
+# Re-process macrophages at higher resolution
+macrophages <- NormalizeData(macrophages)
+macrophages <- FindVariableFeatures(macrophages)
+macrophages <- ScaleData(macrophages)
+macrophages <- RunPCA(macrophages)
+ElbowPlot(macrophages) # elbows around 12
+
+
+macrophages <- RunUMAP(macrophages, dims = 1:10)
+
+# Find subclusters at higher resolution
+macrophages <- FindNeighbors(macrophages, dims = 1:10)
+macrophages <- FindClusters(macrophages, resolution = 0.05) 
+
+# Visualize macrophage subclusters
+DimPlot(macrophages, label = TRUE)
+```
+
+
+```{r}
+
+m0_markers <- c("Cd68", "Trem2","Cx3cr1")  
+m1_markers <- c("Nos2", "Il1b", "Cd86")  
+m2_markers <- c("Arg1", "Il10", "Chil3") 
+
+ 
+
+```
+
+```{r}
+# module scores
+macrophages <- AddModuleScore(macrophages, features = list(m1_markers), name = "M1_score")
+macrophages <- AddModuleScore(macrophages, features = list(m2_markers), name = "M2_score")
+macrophages <- AddModuleScore(macrophages, features = list(m0_markers), name = "M0_score")
+
+# 
+macrophages$M_subtype <- ifelse(macrophages$M1_score1 > macrophages$M2_score1 & 
+                               macrophages$M1_score1 > macrophages$M0_score1, "M1",
+                        ifelse(macrophages$M2_score1 > macrophages$M1_score1 & 
+                               macrophages$M2_score1 > macrophages$M0_score1, "M2", "M0"))
+
+# distribution check
+table(macrophages$M_subtype)
+```
+```{r}
+
+DimPlot(macrophages, group.by = "M_subtype", cols = c("M0" = "lightgreen", "M1" = "red", "M2" = "blue", axes= FALSE)) +
+  ggtitle("Macrophage Subtypes Clustering Analysis")
+
+library(Seurat)    # for NoAxes()
+
+DimPlot(
+  macrophages,
+  group.by = "M_subtype",
+  cols     = c("M0"="lightgreen","M1"="red","M2"="blue")
+) +
+  ggtitle("Macrophage Subtypes Clustering Analysis") +
+  theme(
+    panel.background = element_rect(fill = "white", colour = NA),
+    axis.text        = element_blank(),
+    axis.ticks       = element_blank(),
+    panel.grid       = element_blank()
+  )
+
+
+
+#DimPlot(macrophages, group.by = "stim", cols = c("control" = "lightblue", "PEPITEM" = "pink" ))
+
+
+# Feature plots of key markers
+#FeaturePlot(macrophages, features = c("Nos2", "Arg1", "Il1b", "Mrc1"), ncol = 2)
+
+# Dot plot showing marker expression by subtype
+#DotPlot(macrophages, features = c(m0_markers, m1_markers, m2_markers), 
+       # group.by = "M_subtype") + RotatedAxis()
+```
+```{r}
+# Add the macrophage subtypes back to main Seurat object
+merged_samples$M_subtype <- "Non_Macrophage"
+merged_samples$M_subtype[colnames(merged_samples) %in% colnames(macrophages)] <- macrophages$M_subtype
+
+```
+
+```{r}
+
+colnames(merged_samples@meta.data)
+library(dplyr)
+library(ggplot2)
+
+# Extract metadata for macrophages only
+mac_meta <- merged_samples@meta.data[merged_samples$M_subtype != "Non_Macrophage", ]
+
+# Calculate proportions
+prop_data <- mac_meta %>%
+  group_by(stim, M_subtype) %>%  # Replace 'treatment' with your actual column name
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(stim) %>%
+  mutate(proportion = count / sum(count) * 100)
+
+print(prop_data)
+
+```
+
+`
+```{r}
+
+merged_samples@meta.data
+
+
+# First, check  current sample names
+table(merged_samples$Sample.ID)
+
+
+# Create treatment groups based on sample numbers
+merged_samples$treatment <- case_when(
+  merged_samples$Sample.ID %in% c("Sample 1", "Sample 2", "Sample 5", "Sample 6") ~ "control",
+  merged_samples$Sample.ID %in% c("Sample 3", "Sample 4", "Sample 7", "Sample 8") ~ "PEPITEM",
+  TRUE ~ "unknown"  # This catches any unexpected sample names
+)
+
+# Check the assignment
+table(merged_samples$treatment, merged_samples$Sample.ID)
+
+
+
+
+#  calculating proportions
+prop_by_sample <- merged_samples@meta.data %>%
+  filter(M_subtype != "Non_Macrophage") %>%
+  group_by(treatment, Sample.ID, M_subtype) %>%  
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(treatment, Sample.ID) %>%
+  mutate(total_mac = sum(count),
+         proportion = count / total_mac) %>%
+  ungroup()
+
+
+
+
+# Function to perform statistical tests for each macrophage subtype
+perform_stats_test <- function(subtype_name) {
+  data_subset <- prop_by_sample %>% filter(M_subtype == subtype_name)
+  
+  # Extract data for each group
+  control_data <- data_subset[data_subset$treatment == "control", ]$proportion
+  pepitem_data <- data_subset[data_subset$treatment == "PEPITEM", ]$proportion
+  
+  
+  # Check normality 
+  if(length(control_data) >= 3) {
+    shapiro_control <- shapiro.test(control_data)
+    cat(paste("Shapiro test control: p =", round(shapiro_control$p.value, 4), "\n"))
+  }
+  
+  if(length(pepitem_data) >= 3) {
+    shapiro_pepitem <- shapiro.test(pepitem_data)
+    cat(paste("Shapiro test PEPITEM: p =", round(shapiro_pepitem$p.value, 4), "\n"))
+  }
+  
+  # Perform appropriate test
+
+  test_result <- wilcox.test(control_data, pepitem_data)
+  
+  cat(paste("Wilcoxon test: W =", test_result$statistic, ", p-value =", round(test_result$p.value, 4), "\n"))
+  
+  return(test_result)
+}
+
+# Run tests for each subtype
+m0_test <- perform_stats_test("M0")
+m1_test <- perform_stats_test("M1") 
+m2_test <- perform_stats_test("M2")
+```
+```{r}
+library(ggpubr)
+
+# Convert macrophage proportions to percentages
+prop_by_sample <- prop_by_sample %>%
+  mutate(mac_percentage = proportion * 100)
+
+# Create the plot for macrophages with percentage
+ggplot(prop_by_sample, aes(x = treatment, y = mac_percentage, fill = treatment)) +
+  geom_boxplot(alpha = 0.7, outlier.shape = NA) +
+  geom_jitter(width = 0.2, size = 2, alpha = 0.8, color = "black") +
+  facet_wrap(~M_subtype, scales = "free_y") +
+  scale_fill_manual(values = c("control" = "salmon", "PEPITEM" = "lightblue")) +
+  theme_minimal() +
+  theme(
+    strip.text = element_text(size = 12, face = "bold"),
+    axis.title.x = element_blank(),
+    legend.position = "right"
+  ) +
+  labs(y = "Macrophage Subtype [% synovial cells]", fill = "treatment") 
+ # stat_compare_means(method = "wilcox.test",
+  #                  label = "p.format",
+   #                 label.y.npc = 0.9,
+    #                size = 4)
+
+
+
+
+ggsave("macrophage prop plot.png", width = 10, height = 6, dpi = 300)
+```
+
+
+```{r}
+library(dplyr)
+
+#  make sure we have the percentage column 
+prop_by_sample <- prop_by_sample %>% 
+  mutate(mac_percentage = proportion * 100)
+
+#   identify the outliers 
+outliers_df <- prop_by_sample %>% 
+  group_by(M_subtype, treatment) %>%          # one group = one box
+  mutate(
+    q1    = quantile(mac_percentage, 0.25, na.rm = TRUE),
+    q3    = quantile(mac_percentage, 0.75, na.rm = TRUE),
+    iqr   = q3 - q1,
+    lower = q1 - 1.5 * iqr,
+    upper = q3 + 1.5 * iqr,
+    is_outlier = mac_percentage < lower | mac_percentage > upper
+  ) %>% 
+  ungroup() %>% 
+  filter(is_outlier) %>%                      # keep *only* the outliers
+ dplyr:: select(Sample.ID, M_subtype, treatment, mac_percentage)
+
+#
+outliers_df     
+# write.csv(outliers_df, "outliers_macrophages.csv", row.names = FALSE)
+
+```
+
+
+
+
+
+
+############## SUB CLUSTERING  T CELLS  #############
+
+        # Subtype clustering 
+
+
+
+
+```{r}
+
+#table(merged_samples$SingleR_labels)
+
+# Subset macrophages 
+T_cells <- subset(merged_samples, subset = SingleR_labels_2 %in% c("T cells"))
+
+T_cells <- NormalizeData(T_cells)
+T_cells <- FindVariableFeatures(T_cells)
+T_cells <- ScaleData(T_cells)
+T_cells <- RunPCA(T_cells)
+ElbowPlot(T_cells) 
+
+
+T_cells <- RunUMAP(T_cells, dims = 1:8)
+
+T_cells <- FindNeighbors(T_cells, dims = 1:8)
+T_cells <- FindClusters(T_cells, resolution = 0.1) 
+
+DimPlot(T_cells, label = TRUE)
+```
+
+
+
+
+```{r}
+
+Th1 <- c("Ifng", "Tbx21", "Cxcr3", "Stat4", "Il2rb")
+
+Th17 <- c("Il17a", "Il17f", "Rorc", "Il23r", "Ccr6", "Il1r1")
+
+T_reg <- c("Foxp3", "Il2ra", "Ctla4", "Ikzf2", "Tnfrsf18", "Entpd1")
+
+
+CD8 <- c("Cd8a", "Cd8b1", "Gzmb", "Prf1", "Gzmk", "Nkg7")
+
+
+T_cells <- AddModuleScore(T_cells, features = list(Th1), name = "Th1_score")
+T_cells <- AddModuleScore(T_cells, features = list(Th17), name = "Th17_score")
+T_cells <- AddModuleScore(T_cells, features = list(T_reg), name = "T_reg_score")
+T_cells <- AddModuleScore(T_cells, features = list(CD8), name = "CD8_score")
+
+T_cells$T_subtype <- ifelse(T_cells$Th1_score1 > T_cells$Th17_score1 & 
+                           T_cells$Th1_score1 > T_cells$T_reg_score1 &
+                           T_cells$Th1_score1 > T_cells$CD8_score1, "Th1",
+                    ifelse(T_cells$Th17_score1 > T_cells$Th1_score1 & 
+                           T_cells$Th17_score1 > T_cells$T_reg_score1 &
+                           T_cells$Th17_score1 > T_cells$CD8_score1, "Th17",
+                    ifelse(T_cells$T_reg_score1 > T_cells$Th1_score1 & 
+                           T_cells$T_reg_score1 > T_cells$Th17_score1 &
+                           T_cells$T_reg_score1 > T_cells$CD8_score1, "T_reg",
+                    ifelse(T_cells$CD8_score1 > T_cells$Th1_score1 & 
+                           T_cells$CD8_score1 > T_cells$Th17_score1 &
+                           T_cells$CD8_score1 > T_cells$T_reg_score1, "CD8", "Other"))))
+
+# Distribution check
+table(T_cells$T_subtype)
+
+
+DimPlot(T_cells, group.by = "T_subtype", 
+        cols = c("Th1" = "red", "Th17" = "orange", "T_reg" = "blue", "CD8" = "purple", "Other" = "lightgrey"))+
+  ggtitle("T-Cell Subtypes Clustering Analysis")
+
+# Visualize by treatment
+DimPlot(T_cells, group.by = "treatment", cols = c("control" = "lightblue", "PEPITEM" = "pink"))
+
+# Feature plots of key markers
+#FeaturePlot(T_cells, features = c("Ifng", "Il17a", "Foxp3", "Cd8a"), ncol = 2)
+
+# Dot plot showing marker expression by subtype
+#DotPlot(T_cells, features = c(Th1, Th17, T_reg, CD8), 
+      #  group.by = "T_subtype") + RotatedAxis()
+
+# Add the T cell subtypes back to main Seurat object
+merged_samples$T_subtype <- "Non_T_cell"
+merged_samples$T_subtype[colnames(merged_samples) %in% colnames(T_cells)] <- T_cells$T_subtype
+
+
+
+
+```
+
+```{r}
+
+colnames(merged_samples@meta.data)
+library(dplyr)
+library(ggplot2)
+
+# Extract metadata for macrophages only
+T_meta <- merged_samples@meta.data[merged_samples$T_subtype != "Non_T_cell", ]
+
+# Calculate proportions
+prop_data_t <- T_meta %>%
+  group_by(stim, T_subtype) %>% 
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(stim) %>%
+  mutate(proportion = count / sum(count) * 100)
+
+print(prop_data_t)
+
+```
+
+`
+```{r}
+
+# Extract metadata for T cells only
+T_meta <- merged_samples@meta.data[merged_samples$T_subtype != "Non_T_cell", ]
+
+# Calculate proportions for T cells by sample
+prop_by_sample_t <- merged_samples@meta.data %>%
+  filter(T_subtype != "Non_T_cell") %>%
+  group_by(treatment, Sample.ID, T_subtype) %>%  
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(treatment, Sample.ID) %>%
+  mutate(total_t = sum(count),
+         proportion = count / total_t) %>%  
+  ungroup()
+
+print(prop_by_sample_t)
+
+# Function to perform statistical tests for each T cell subtype
+perform_stats_test_t <- function(subtype_name) {
+  data_subset <- prop_by_sample_t %>% filter(T_subtype == subtype_name)
+  
+  # Extract data for each group
+  control_data <- data_subset[data_subset$treatment == "control", ]$proportion
+  pepitem_data <- data_subset[data_subset$treatment == "PEPITEM", ]$proportion
+  
+
+  
+  # Check normality 
+  if(length(control_data) >= 3) {
+    shapiro_control <- shapiro.test(control_data)
+    cat(paste("Shapiro test control: p =", round(shapiro_control$p.value, 4), "\n"))
+  }
+  
+  if(length(pepitem_data) >= 3) {
+    shapiro_pepitem <- shapiro.test(pepitem_data)
+    cat(paste("Shapiro test PEPITEM: p =", round(shapiro_pepitem$p.value, 4), "\n"))
+  }
+  
+  # Perform appropriate test
+  test_result <- wilcox.test(control_data, pepitem_data)
+  
+  cat(paste("Wilcoxon test: W =", test_result$statistic, ", p-value =", round(test_result$p.value, 4), "\n"))
+  
+  return(test_result)
+}
+
+# Run tests for each T cell subtype
+th1_test <- perform_stats_test_t("Th1")
+th17_test <- perform_stats_test_t("Th17") 
+treg_test <- perform_stats_test_t("T_reg")
+cd8_test <- perform_stats_test_t("CD8")
+```
+```{r}
+library(ggpubr)
+# Convert T cell subtype proportions to percentages
+prop_by_sample_t <- prop_by_sample_t %>%
+  mutate(t_percentage = proportion * 100)
+
+# Create the plot for T cell subtypes with percentage
+ggplot(prop_by_sample_t, aes(x = treatment, y = t_percentage, fill = treatment)) +
+  geom_boxplot(alpha = 0.7, outlier.shape = NA) +
+  geom_jitter(width = 0.2, size = 2, alpha = 0.8, color = "black") +
+  facet_wrap(~T_subtype, scales = "free_y") +
+  scale_fill_manual(values = c("control" = "salmon", "PEPITEM" = "lightblue")) +
+  theme_minimal() +
+  theme(
+    strip.text = element_text(size = 12, face = "bold"),
+    axis.title.x = element_blank(),
+    legend.position = "right"
+  ) +
+  labs(y = "T cell Subtype [% synovial cells]", fill = "treatment") 
+ # stat_compare_means(method = "wilcox.test",
+  #                  label = "p.format",
+   #                 label.y.npc = 0.9,
+    #                size = 4)
+ggsave("T cell prop plot.png", width = 10, height = 6, dpi = 300)
+```
+
+```{r}
+library(dplyr)
+
+prop_by_sample_t <- prop_by_sample_t %>% 
+  mutate(t_percentage = proportion * 100)   
+
+outliers_t <- prop_by_sample_t %>% 
+  group_by(T_subtype, treatment) %>%        
+  mutate(
+    q1    = quantile(t_percentage, 0.25, na.rm = TRUE),
+    q3    = quantile(t_percentage, 0.75, na.rm = TRUE),
+    iqr   = q3 - q1,
+    lower = q1 - 1.5 * iqr,
+    upper = q3 + 1.5 * iqr,
+    is_outlier = t_percentage < lower | t_percentage > upper
+  ) %>% 
+  ungroup() %>% 
+  filter(is_outlier) %>% 
+  dplyr::select(Sample.ID, T_subtype, treatment, t_percentage)
+
+outliers_t             # view / export as you wish
+# write.csv(outliers_t, "outliers_t_cells.csv", row.names = FALSE)
+
+```
+
+
+
+
+
+```{r}
+
+
+# Calculate total T cell proportions per sample
+total_t_prop <- merged_samples@meta.data %>%
+  group_by(treatment, Sample.ID) %>%
+  summarise(
+    total_cells = n(),
+    t_cells = sum(T_subtype != "Non_T_cell"),
+    t_proportion = t_cells / total_cells,
+    .groups = "drop"
+  )
+
+print(total_t_prop)
+
+# Statistical test for total T cell proportions
+control_t_data <- total_t_prop[total_t_prop$treatment == "control", ]$t_proportion
+pepitem_t_data <- total_t_prop[total_t_prop$treatment == "PEPITEM", ]$t_proportion
+
+cat("=== Total T cell Analysis ===\n")
+cat(paste("Control samples (n =", length(control_t_data), "):", paste(round(control_t_data, 4), collapse = ", "), "\n"))
+cat(paste("PEPITEM samples (n =", length(pepitem_t_data), "):", paste(round(pepitem_t_data, 4), collapse = ", "), "\n"))
+
+# Perform Wilcoxon test
+total_t_test <- wilcox.test(control_t_data, pepitem_t_data)
+cat(paste("Wilcoxon test: W =", total_t_test$statistic, ", p-value =", round(total_t_test$p.value, 4), "\n"))
+
+
+
+total_t_prop <- total_t_prop %>%
+  mutate(t_percentage = t_proportion * 100)
+
+# Plot total T cell proportions 
+ggplot(total_t_prop, aes(x = treatment, y = t_percentage, fill = treatment)) + 
+  geom_boxplot(alpha = 0.7, outlier.shape = NA) +
+  geom_jitter(width = 0.2, size = 2, alpha = 0.8, color = "black") +
+  scale_fill_manual(values = c("control" = "salmon", "PEPITEM" = "lightblue")) +
+  theme_minimal() +
+  theme(
+    axis.title.x = element_blank(),
+    legend.position = "right"
+  ) +
+  labs(y =   "Total T cell proportion [% synovial cells]",  
+       title = "Total T cells: Control vs PEPITEM",
+       fill = "stim") 
+  #stat_compare_means(method = "wilcox.test",
+   #                 label = "p.format",
+    #                label.y.npc = 0.9,
+     #               size = 4)
+
+ggsave("t total prop plot.png", width = 10, height = 6, dpi = 300)
+```
+
+
+
+
+
+
+############## SUB CLUSTERING  MONOCYTES  #############
+
+
+
+```{r}
+
+
+# Subset monocytes 
+monocytes <- subset(merged_samples, subset = SingleR_labels %in% c("Monocytes"))
+
+monocytes <- NormalizeData(monocytes)
+monocytes <- FindVariableFeatures(monocytes)
+monocytes <- ScaleData(monocytes)
+monocytes <- RunPCA(monocytes)
+ElbowPlot(monocytes) 
+
+monocytes <- RunUMAP(monocytes, dims = 1:12)
+
+monocytes <- FindNeighbors(monocytes, dims = 1:12)
+monocytes <- FindClusters(monocytes, resolution = 0.03) 
+
+DimPlot(monocytes, label = TRUE)
+```
+```{r}
+
+Classical <- c("Ly6c2", "Ccr2", "Sell", "Cd62l", "S100a4") 
+
+Non_classical <- c("Cx3cr1", "Nr4a1", "Ace", "Cd16", "Fcgr3")   
+
+Intermediate <- c( "Cx3cr1", "Cd14", "Ccr5", "Il1b")  
+
+# Add module scores
+monocytes <- AddModuleScore(monocytes, features = list(Classical), name = "Classical_score")
+monocytes <- AddModuleScore(monocytes, features = list(Non_classical), name = "Non_classical_score")
+monocytes <- AddModuleScore(monocytes, features = list(Intermediate), name = "Intermediate_score")
+
+
+monocytes$Mono_subtype <- ifelse(monocytes$Classical_score1 > monocytes$Non_classical_score1 & 
+                                monocytes$Classical_score1 > monocytes$Intermediate_score1, "Classical",
+                         ifelse(monocytes$Non_classical_score1 > monocytes$Classical_score1 & 
+                                monocytes$Non_classical_score1 > monocytes$Intermediate_score1, "Non_classical",
+                         ifelse(monocytes$Intermediate_score1 > monocytes$Classical_score1 & 
+                                monocytes$Intermediate_score1 > monocytes$Non_classical_score1, "Intermediate", "Other")))
+
+# Distribution check
+table(monocytes$Mono_subtype)
+
+DimPlot(monocytes, group.by = "Mono_subtype", 
+        cols = c("Classical" = "red", "Non_classical" = "blue", "Intermediate" = "green", "Other" = "lightgrey")) +
+  ggtitle("Monocyte Subtypes Clustering Analysis")
+
+# Visualize by treatment
+DimPlot(monocytes, group.by = "treatment", cols = c("control" = "lightblue", "PEPITEM" = "pink"))
+
+# Add the monocyte subtypes back to main Seurat object
+merged_samples$Mono_subtype <- "Non_Monocyte"
+merged_samples$Mono_subtype[colnames(merged_samples) %in% colnames(monocytes)] <- monocytes$Mono_subtype
+```
+
+
+```{r}
+# Extract metadata for monocytes only
+Mono_meta <- merged_samples@meta.data[merged_samples$Mono_subtype != "Non_Monocyte", ]
+
+# Calculate proportions
+prop_data_mono <- Mono_meta %>%
+  group_by(stim, Mono_subtype) %>% 
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(stim) %>%
+  mutate(proportion = count / sum(count) * 100)
+
+print(prop_data_mono)
+```
+
+
+```{r}
+# Calculate proportions for monocytes by sample
+prop_by_sample_mono <- merged_samples@meta.data %>%
+  filter(Mono_subtype != "Non_Monocyte") %>%
+  group_by(treatment, Sample.ID, Mono_subtype) %>%  
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(treatment, Sample.ID) %>%
+  mutate(total_mono = sum(count),
+         proportion = count / total_mono) %>%  
+  ungroup()
+
+print(prop_by_sample_mono)
+
+# Function to perform statistical tests for each monocyte subtype
+perform_stats_test_mono <- function(subtype_name) {
+  data_subset <- prop_by_sample_mono %>% filter(Mono_subtype == subtype_name)
+  
+  # Extract data for each group
+  control_data <- data_subset[data_subset$treatment == "control", ]$proportion
+  pepitem_data <- data_subset[data_subset$treatment == "PEPITEM", ]$proportion
+
+  
+  # Check normality 
+  if(length(control_data) >= 3) {
+    shapiro_control <- shapiro.test(control_data)
+    cat(paste("Shapiro test control: p =", round(shapiro_control$p.value, 4), "\n"))
+  }
+  
+  if(length(pepitem_data) >= 3) {
+    shapiro_pepitem <- shapiro.test(pepitem_data)
+    cat(paste("Shapiro test PEPITEM: p =", round(shapiro_pepitem$p.value, 4), "\n"))
+  }
+  
+  # Perform appropriate test
+  test_result <- wilcox.test(control_data, pepitem_data)
+  
+  cat(paste("Wilcoxon test: W =", test_result$statistic, ", p-value =", round(test_result$p.value, 4), "\n"))
+  
+  return(test_result)
+}
+
+# Run tests for each monocyte subtype
+classical_test <- perform_stats_test_mono("Classical")
+non_classical_test <- perform_stats_test_mono("Non_classical") 
+intermediate_test <- perform_stats_test_mono("Intermediate")
+```
+```{r}
+library(ggpubr)
+# Convert monocyte subtype proportions to percentages
+prop_by_sample_mono <- prop_by_sample_mono %>%
+  mutate(mono_percentage = proportion * 100)
+
+# Create the plot for monocyte subtypes with percentage
+ggplot(prop_by_sample_mono, aes(x = treatment, y = mono_percentage, fill = treatment)) +
+  geom_boxplot(alpha = 0.7, outlier.shape = NA) +
+  geom_jitter(width = 0.2, size = 2, alpha = 0.8, color = "black") +
+  facet_wrap(~Mono_subtype, scales = "free_y") +
+  scale_fill_manual(values = c("control" = "salmon", "PEPITEM" = "lightblue")) +
+  theme_minimal() +
+  theme(
+    strip.text = element_text(size = 12, face = "bold"),
+    axis.title.x = element_blank(),
+    legend.position = "right"
+  ) +
+  labs(y =  "Monocyte subtypes [% synovial cells], fill = "treatment")
+ # stat_compare_means(method = "wilcox.test",
+  #                  label = "p.format",
+   #                 label.y.npc = 0.9,
+    #                size = 4)
+
+ggsave("monocyte prop plot.png", width = 10, height = 6, dpi = 300)
+```
+
+outliars 
+
+```{r}
+library(dplyr)
+
+prop_by_sample_mono <- prop_by_sample_mono %>% 
+  mutate(mono_percentage = proportion * 100)   
+
+outliers_mono <- prop_by_sample_mono %>% 
+  group_by(Mono_subtype, treatment) %>%        #
+  mutate(
+    q1    = quantile(mono_percentage, 0.25, na.rm = TRUE),
+    q3    = quantile(mono_percentage, 0.65, na.rm = TRUE),
+    iqr   = q3 - q1,
+    lower = q1 - 1.5 * iqr,
+    upper = q3 + 1.5 * iqr,
+    is_outlier = mono_percentage < lower | mono_percentage > upper
+  ) %>% 
+  ungroup() %>% 
+  filter(is_outlier) %>%                      
+  dplyr::select(Sample.ID, Mono_subtype, treatment, mono_percentage)
+
+outliers_mono          
+
+```
+
+
