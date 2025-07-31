@@ -1,0 +1,85 @@
+
+#make sure directory layout is like so 
+scRNA_pipeline/
+├── run_scRNA_pipeline.sh         # Main controller
+├── config/
+│   ├── paths.config              # Reference and folder paths
+│   └── sample_list.txt           # Sample names (one per line)
+├── pipe_scripts/
+│   ├── STARMap_Idx.sl            # SLURM: Build STAR index
+│   ├── STARsolo_V1.1.sl          # SLURM: Run STARsolo (multi-lane support)
+│   └── check_read_length.sh      # Utility: Suggest sjdbOverhang
+├── data/                         # FASTQ files (flat layout)
+├── output/                       # STARsolo output per sample
+└── logs/                         # SLURM job logs
+
+
+
+# RUNNING THE SCRIPTS
+
+#sample script
+make sure sample names are as follows:
+    Paired end analysis:
+`SAMPLE_L001_R1_001.fastq.gz`, `SAMPLE_L001_R2_001.fastq.gz`, etc.
+
+
+STAR SOLO has the ability to account for multiple sample lanes e.g (L001,L002...L00n)
+It will merge the multiple lanes
+e.g.
+SAMPLE_L001_R1_001.fastq.gz
+SAMPLE_L002_R1_001.fastq.gz
+SAMPLE_L003_R1_001.fastq.gz
+
+They will be passed to STAR via comma-separated lists using `--readFilesIn` without needing concatenation.
+
+No need to change`sample_list.txt` format — just use base sample ID
+e.g. SAMPLE
+
+
+
+#paths script
+
+#make sure you include the absolute paths for the following:
+
+FASTA (directory to reference genome fasta file)
+GTF (directory to reference genome GTF file)
+DATA DIR (directory to FastQC/ cleaned samples)
+OUT DIR (directory to where you would like the output to end up)
+
+
+
+##### OPTIONAL STEP#####
+
+You may estimate --sjdbOverhang
+# note that to estimate the overhang of paired reads, use the R2 file of your sample. 
+#R2 stores the sequences and R1 stores the barcodes 
+
+ run the following code:
+bash
+./pipe_scripts/check_read_length.sh data/SAMPLE_R2_001.fastq.gz
+
+
+#run the alignment pipeline 
+
+bash run_scRNA_pipeline.sh -c config/paths.config -s config/sample_list.txt
+
+
+#output files
+
+#barcode
+#matrix
+#features
+
+
+
+
+
+
+
+
+
+
+
+
+
+
