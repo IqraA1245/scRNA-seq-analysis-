@@ -1,0 +1,1325 @@
+```{r}
+library(Seurat)
+library(SingleR)
+library(SingleCellExperiment)
+library(celldex)
+library (scater)
+library(tidyverse)
+library(dplyr)
+library(R.utils)
+library(DoubletFinder)
+library(EnhancedVolcano)
+
+
+```
+
+```{r}
+filtered.dir_1 <- "filepath to data"
+filtered.dir_2 <- "filepath to data"
+filtered.dir_3 <- "filepath to data"
+filtered.dir_4 <- "filepath to data"
+filtered.dir_5 <- "filepath to data"
+filtered.dir_6 <- "filepath to data"
+filtered.dir_7 <- "filepath to data"
+filtered.dir_8 <- "filepath to data"
+
+
+```
+
+```{r}
+# after you’ve made your Seurat object:
+seu_s1 <- Read10X(data.dir = filtered.dir_1) %>% 
+  CreateSeuratObject(project = "Query", min.cells = 3, min.features = 200)
+
+
+
+
+seu_s1 <- AddMetaData(
+  object = seu_s1,
+  metadata = "control",
+  col.name = "stim"
+)
+
+seu_s1 <- AddMetaData(
+  object = seu_s1,
+  metadata = "Sample 1",
+  col.name = "Sample ID"
+)
+
+# check it’s there
+head(seu_s1@meta.data)
+
+
+
+
+
+```
+
+
+```{r}
+seu_s2 <- Read10X(data.dir = filtered.dir_2) %>% 
+  CreateSeuratObject(project = "Query", min.cells = 3, min.features = 200)
+
+
+seu_s2 <- AddMetaData(
+  object = seu_s2,
+  metadata = "control",
+  col.name = "stim"
+)
+
+seu_s2 <- AddMetaData(
+  object = seu_s2,
+  metadata = "Sample 2",
+  col.name = "Sample ID"
+)
+
+# check it’s there
+head(seu_s2@meta.data)
+
+```
+
+
+
+
+```{r}
+seu_s3 <- Read10X(data.dir = filtered.dir_3) %>% 
+  CreateSeuratObject(project = "Query", min.cells = 3, min.features = 300)
+
+
+
+seu_s3 <- AddMetaData(
+  object = seu_s3,
+  metadata = "PEPITEM",
+  col.name = "stim"
+)
+
+seu_s3 <- AddMetaData(
+  object = seu_s3,
+  metadata = "Sample 3",
+  col.name = "Sample ID"
+)
+
+# check it’s there
+head(seu_s3@meta.data)
+
+
+```
+
+
+
+
+
+
+
+```{r}
+seu_s4 <- Read10X(data.dir = filtered.dir_4) %>% 
+  CreateSeuratObject(project = "Query", min.cells = 3, min.features = 200)
+
+
+seu_s4 <- AddMetaData(
+  object = seu_s4,
+  metadata = "PEPITEM",
+  col.name = "stim"
+)
+
+seu_s4 <- AddMetaData(
+  object = seu_s4,
+  metadata = "Sample 4",
+  col.name = "Sample ID"
+)
+
+# check it’s there
+head(seu_s4@meta.data)
+
+
+```
+
+```{r}
+seu_s5 <- Read10X(data.dir = filtered.dir_5) %>% 
+  CreateSeuratObject(project = "Query", min.cells = 3, min.features = 200)
+
+
+
+seu_s5 <- AddMetaData(
+  object = seu_s5,
+  metadata = "control",
+  col.name = "stim"
+)
+
+seu_s5 <- AddMetaData(
+  object = seu_s5,
+  metadata = "Sample 5",
+  col.name = "Sample ID"
+)
+
+# check it’s there
+head(seu_s5@meta.data)
+
+
+```
+
+
+
+```{r}
+seu_s6 <- Read10X(data.dir = filtered.dir_6) %>% 
+  CreateSeuratObject(project = "Query", min.cells = 3, min.features = 200)
+
+
+
+seu_s6 <- AddMetaData(
+  object = seu_s6,
+  metadata = "control",
+  col.name = "stim"
+)
+
+seu_s6 <- AddMetaData(
+  object = seu_s6,
+  metadata = "Sample 6",
+  col.name = "Sample ID"
+)
+
+# check it’s there
+head(seu_s6@meta.data)
+
+
+```
+
+
+
+```{r}
+seu_s7 <- Read10X(data.dir = filtered.dir_7) %>% 
+  CreateSeuratObject(project = "Query", min.cells = 3, min.features = 200)
+
+
+seu_s7 <- AddMetaData(
+  object = seu_s7,
+  metadata = "PEPITEM",
+  col.name = "stim"
+)
+
+seu_s7 <- AddMetaData(
+  object = seu_s7,
+  metadata = "Sample 7",
+  col.name = "Sample ID"
+)
+
+# check it’s there
+head(seu_s7@meta.data)
+
+
+```
+
+
+
+
+```{r}
+seu_s8 <- Read10X(data.dir = filtered.dir_8) %>% 
+  CreateSeuratObject(project = "Query", min.cells = 3, min.features = 200)
+
+
+
+seu_s8 <- AddMetaData(
+  object = seu_s8,
+  metadata = "PEPITEM",
+  col.name = "stim"
+)
+
+seu_s8 <- AddMetaData(
+  object = seu_s8,
+  metadata = "Sample 8",
+  col.name = "Sample ID"
+)
+
+# check it’s there
+head(seu_s8@meta.data)
+
+
+
+```
+#################################################################################################
+```{r}
+
+
+
+#all_dfs <- list(seu_s1,seu_s2,seu_s3,seu_s4,seu_s5,seu_s6,seu_s7,seu_s8)  
+
+#complete_df <- bind_rows(all_dfs)
+#complete_df
+#dim(complete_df)
+```
+
+
+#################################################################################################
+
+#doubletfinder workflow 
+
+```{r}
+seu_s8 <- NormalizeData(seu_s8)
+seu_s8 <- FindVariableFeatures(seu_s8)
+seu_s8 <- ScaleData(seu_s8)
+seu_s8 <- RunPCA(seu_s8, nfeatures.print = 10)
+
+
+  # Find significant PCs
+  stdv <- seu_s8[["pca"]]@stdev
+  percent_stdv <- (stdv/sum(stdv)) * 100
+  cumulative <- cumsum(percent_stdv)
+  co1 <- which(cumulative > 90 & percent_stdv < 5)[1] 
+  co2 <- sort(which((percent_stdv[1:length(percent_stdv) - 1] - 
+                       percent_stdv[2:length(percent_stdv)]) > 0.1), 
+              decreasing = T)[1] + 1
+  min_pc <- min(co1, co2)
+
+min_pc
+
+```
+
+
+
+```{r}
+  # Finish pre-processing with min_pc
+  seu_s8 <- RunUMAP(seu_s8, dims = 1:min_pc)
+  seu_s8 <- FindNeighbors(object = seu_s8, dims = 1:min_pc)              
+  seu_s8 <- FindClusters(object = seu_s8, resolution = 0.1)
+```
+
+#neighbourhood size (pK)
+
+```{r}
+  # pK identification (no ground-truth) 
+  #introduces artificial doublets in varying props, merges with real data set and 
+  # preprocesses the data + calculates the prop of artficial neighrest neighbours, 
+  # provides a list of the proportion of artificial nearest neighbours for varying
+  # combinations of the pN and pK
+library(DoubletFinder)
+  sweep_list <- paramSweep(seu_s8, PCs = 1:min_pc, sct = FALSE)   
+  sweep_stats <- summarizeSweep(sweep_list)
+  bcmvn <- find.pK(sweep_stats) # computes a metric to find the optimal pK value (max mean variance normalised by modality coefficient)
+  # Optimal pK is the max of the bimodality coefficient (BCmvn) distribution
+  optimal.pk <- bcmvn %>% 
+    dplyr::filter(BCmetric == max(BCmetric)) %>%
+    dplyr::select(pK)
+  optimal.pk <- as.numeric(as.character(optimal.pk[[1]]))
+```
+
+#Number of expected real doublets, nExp (homotypic doublets)
+
+```{r}
+  # Homotypic doublet proportion estimate
+  annotations <- seu_s8@meta.data$seurat_clusters # use the clusters as the user-defined cell types
+  homotypic.prop <- modelHomotypic(annotations) # get proportions of homotypic doublets
+```
+
+```{r}
+
+    
+    # 10X multiplet rates table
+    #https://rpubs.com/kenneditodd/doublet_finder_example
+multiplet_rates_10x <- data.frame('Multiplet_rate'= c(0.004, 0.008, 0.0160, 0.023, 0.031, 0.039, 0.046, 0.054, 0.061, 0.069, 0.076),
+                                      'Loaded_cells' = c(800, 1600, 3200, 4800, 6400, 8000, 9600, 11200, 12800, 14400, 16000),
+                                      'Recovered_cells' = c(500, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000))
+    
+    print(multiplet_rates_10x)
+    
+    multiplet_rate <- multiplet_rates_10x %>% dplyr::filter(Recovered_cells < nrow(seu_s8@meta.data)) %>% 
+      dplyr::slice(which.max(Recovered_cells)) %>% # select the min threshold depending on your number of samples
+      dplyr::select(Multiplet_rate) %>% as.numeric(as.character()) # get the expected multiplet rate for that number of recovered cells
+    
+    print(paste('Setting multiplet rate to', multiplet_rate))
+
+  
+```
+
+```{r}
+  nExp.poi <- round(multiplet_rate * nrow(seu_s8@meta.data)) # multiply by number of cells to get the number of expected multiplets
+  nExp.poi.adj <- round(nExp.poi * (1 - homotypic.prop)) # expected number of doublets
+```
+
+### Run doubletfinder
+
+```{r}
+  # run DoubletFinder
+  seu_s8 <- doubletFinder(seu = seu_s8, 
+                          PCs = 1:min_pc, 
+                          pK = optimal.pk, # the neighborhood size used to compute the number of artificial nearest neighbours
+                          nExp = nExp.poi.adj) # number of expected real doublets
+  # change name of metadata column with Singlet/Doublet information
+  colnames(seu_s8@meta.data)[grepl('DF.classifications.*', colnames(seu_s8@meta.data))] <- "doublet_finder"
+
+```
+
+```{r}
+  double_finder_res <- seu_s8@meta.data['doublet_finder'] # get the metadata column with singlet, doublet info
+  double_finder_res <- rownames_to_column(double_finder_res, "row_names") # add the cell IDs as new column to be able to merge correctly
+```
+
+```{r}
+double_finder_res
+```
+
+```{r}
+# 1. turn your tibble into a simple named vector
+df <- double_finder_res
+meta_vec <- df$doublet_finder
+names(meta_vec) <- df$row_names
+
+# 2. add it to your Seurat object
+seu_s8 <- AddMetaData(
+  object   = seu_s8,
+  metadata = meta_vec,
+  col.name = "doublet_finder"
+)
+
+# 3. check it
+head(seu_s8@meta.data["doublet_finder"])
+head(seu_s8@meta.data)
+```
+
+
+
+##################################################################################################
+
+
+
+```{r}
+seu_s7 <- NormalizeData(seu_s7)
+seu_s7 <- FindVariableFeatures(seu_s7)
+seu_s7 <- ScaleData(seu_s7)
+seu_s7 <- RunPCA(seu_s7, nfeatures.print = 10)
+
+
+  # Find significant PCs
+  stdv <- seu_s7[["pca"]]@stdev
+  percent_stdv <- (stdv/sum(stdv)) * 100
+  cumulative <- cumsum(percent_stdv)
+  co1 <- which(cumulative > 90 & percent_stdv < 5)[1] 
+  co2 <- sort(which((percent_stdv[1:length(percent_stdv) - 1] - 
+                       percent_stdv[2:length(percent_stdv)]) > 0.1), 
+              decreasing = T)[1] + 1
+  min_pc <- min(co1, co2)
+
+min_pc
+
+```
+
+
+
+```{r}
+  # Finish pre-processing with min_pc
+  seu_s7 <- RunUMAP(seu_s7, dims = 1:min_pc)
+  seu_s7 <- FindNeighbors(object = seu_s7, dims = 1:min_pc)              
+  seu_s7 <- FindClusters(object = seu_s7, resolution = 0.1)
+```
+
+#neighbourhood size (pK)
+
+```{r}
+  # pK identification (no ground-truth) 
+  #introduces artificial doublets in varying props, merges with real data set and 
+  # preprocesses the data + calculates the prop of artficial neighrest neighbours, 
+  # provides a list of the proportion of artificial nearest neighbours for varying
+  # combinations of the pN and pK
+library(DoubletFinder)
+  sweep_list <- paramSweep(seu_s7, PCs = 1:min_pc, sct = FALSE)   
+  sweep_stats <- summarizeSweep(sweep_list)
+  bcmvn <- find.pK(sweep_stats) # computes a metric to find the optimal pK value (max mean variance 
+  optimal.pk <- bcmvn %>% 
+    dplyr::filter(BCmetric == max(BCmetric)) %>%
+    dplyr::select(pK)
+  optimal.pk <- as.numeric(as.character(optimal.pk[[1]]))
+```
+
+#Number of expected real doublets, nExp (homotypic doublets)
+
+```{r}
+  # Homotypic doublet proportion estimate
+  annotations <- seu_s8@meta.data$seurat_clusters # use the clusters as the user-defined cell types
+  homotypic.prop <- modelHomotypic(annotations) # get proportions of homotypic doublets
+```
+
+```{r}
+
+    
+    # 10X multiplet rates table
+    #https://rpubs.com/kenneditodd/doublet_finder_example
+multiplet_rates_10x <- data.frame('Multiplet_rate'= c(0.004, 0.008, 0.0160, 0.023, 0.031, 0.039, 0.046, 0.054, 0.061, 0.069, 0.076),
+                                      'Loaded_cells' = c(800, 1600, 3200, 4800, 6400, 8000, 9600, 11200, 12800, 14400, 16000),
+                                      'Recovered_cells' = c(500, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000))
+    
+    print(multiplet_rates_10x)
+    
+    multiplet_rate <- multiplet_rates_10x %>% dplyr::filter(Recovered_cells < nrow(seu_s8@meta.data)) %>% 
+      dplyr::slice(which.max(Recovered_cells)) %>% # select the min threshold depending on your number of samples
+      dplyr::select(Multiplet_rate) %>% as.numeric(as.character()) # get the expected multiplet rate for that number of recovered cells
+    
+    print(paste('Setting multiplet rate to', multiplet_rate))
+
+  
+```
+
+```{r}
+  nExp.poi <- round(multiplet_rate * nrow(seu_s7@meta.data)) # multiply by number of cells to get the number of expected multiplets
+  nExp.poi.adj <- round(nExp.poi * (1 - homotypic.prop)) # expected number of doublets
+```
+
+### Run doubletfinder
+
+```{r}
+  # run DoubletFinder
+  seu_s7 <- doubletFinder(seu = seu_s7, 
+                          PCs = 1:min_pc, 
+                          pK = optimal.pk, # the neighborhood size used to compute the number of artificial nearest neighbours
+                          nExp = nExp.poi.adj) # number of expected real doublets
+  # change name of metadata column with Singlet/Doublet information
+  colnames(seu_s7@meta.data)[grepl('DF.classifications.*', colnames(seu_s7@meta.data))] <- "doublet_finder"
+
+```
+
+```{r}
+  double_finder_res <- seu_s7@meta.data['doublet_finder'] # get the metadata column with singlet, doublet info
+  double_finder_res <- rownames_to_column(double_finder_res, "row_names") # add the cell IDs as new column to be able to merge correctly
+```
+
+```{r}
+double_finder_res
+```
+
+```{r}
+# 1. turn your tibble into a simple named vector
+df <- double_finder_res
+meta_vec <- df$doublet_finder
+names(meta_vec) <- df$row_names
+
+# 2. add it to your Seurat object
+seu_s7 <- AddMetaData(
+  object   = seu_s7,
+  metadata = meta_vec,
+  col.name = "doublet_finder"
+)
+
+# 3. check it
+head(seu_s7@meta.data["doublet_finder"])
+
+```
+
+
+
+
+##############################################################################################################################
+
+```{r}
+seu_s6 <- NormalizeData(seu_s6)
+seu_s6 <- FindVariableFeatures(seu_s6)
+seu_s6 <- ScaleData(seu_s6)
+seu_s6 <- RunPCA(seu_s6, nfeatures.print = 10)
+
+
+  # Find significant PCs
+  stdv <- seu_s6[["pca"]]@stdev
+  percent_stdv <- (stdv/sum(stdv)) * 100
+  cumulative <- cumsum(percent_stdv)
+  co1 <- which(cumulative > 90 & percent_stdv < 5)[1] 
+  co2 <- sort(which((percent_stdv[1:length(percent_stdv) - 1] - 
+                       percent_stdv[2:length(percent_stdv)]) > 0.1), 
+              decreasing = T)[1] + 1
+  min_pc <- min(co1, co2)
+
+min_pc
+
+```
+
+
+
+```{r}
+  # Finish pre-processing with min_pc
+  seu_s6 <- RunUMAP(seu_s6, dims = 1:min_pc)
+  seu_s6 <- FindNeighbors(object = seu_s6, dims = 1:min_pc)              
+  seu_s6 <- FindClusters(object = seu_s6, resolution = 0.1)
+```
+
+#neighbourhood size (pK)
+
+```{r}
+  # pK identification (no ground-truth) 
+  #introduces artificial doublets in varying props, merges with real data set and 
+  # preprocesses the data + calculates the prop of artficial neighrest neighbours, 
+  # provides a list of the proportion of artificial nearest neighbours for varying
+  # combinations of the pN and pK
+library(DoubletFinder)
+  sweep_list <- paramSweep(seu_s6, PCs = 1:min_pc, sct = FALSE)   
+  sweep_stats <- summarizeSweep(sweep_list)
+  bcmvn <- find.pK(sweep_stats) # computes a metric to find the optimal pK value (max mean variance 
+  optimal.pk <- bcmvn %>% 
+    dplyr::filter(BCmetric == max(BCmetric)) %>%
+    dplyr::select(pK)
+  optimal.pk <- as.numeric(as.character(optimal.pk[[1]]))
+```
+
+#Number of expected real doublets, nExp (homotypic doublets)
+
+```{r}
+  # Homotypic doublet proportion estimate
+  annotations <- seu_s8@meta.data$seurat_clusters # use the clusters as the user-defined cell types
+  homotypic.prop <- modelHomotypic(annotations) # get proportions of homotypic doublets
+```
+
+```{r}
+
+    
+    # 10X multiplet rates table
+    #https://rpubs.com/kenneditodd/doublet_finder_example
+multiplet_rates_10x <- data.frame('Multiplet_rate'= c(0.004, 0.008, 0.0160, 0.023, 0.031, 0.039, 0.046, 0.054, 0.061, 0.069, 0.076),
+                                      'Loaded_cells' = c(800, 1600, 3200, 4800, 6400, 8000, 9600, 11200, 12800, 14400, 16000),
+                                      'Recovered_cells' = c(500, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000))
+    
+    print(multiplet_rates_10x)
+    
+    multiplet_rate <- multiplet_rates_10x %>% dplyr::filter(Recovered_cells < nrow(seu_s8@meta.data)) %>% 
+      dplyr::slice(which.max(Recovered_cells)) %>% # select the min threshold depending on your number of samples
+      dplyr::select(Multiplet_rate) %>% as.numeric(as.character()) # get the expected multiplet rate for that number of recovered cells
+    
+    print(paste('Setting multiplet rate to', multiplet_rate))
+
+  
+```
+
+```{r}
+  nExp.poi <- round(multiplet_rate * nrow(seu_s6@meta.data)) # multiply by number of cells to get the number of expected multiplets
+  nExp.poi.adj <- round(nExp.poi * (1 - homotypic.prop)) # expected number of doublets
+```
+
+### Run doubletfinder
+
+```{r}
+  # run DoubletFinder
+  seu_s6 <- doubletFinder(seu = seu_s6, 
+                          PCs = 1:min_pc, 
+                          pK = optimal.pk, # the neighborhood size used to compute the number of artificial nearest neighbours
+                          nExp = nExp.poi.adj) # number of expected real doublets
+  # change name of metadata column with Singlet/Doublet information
+  colnames(seu_s6@meta.data)[grepl('DF.classifications.*', colnames(seu_s6@meta.data))] <- "doublet_finder"
+
+```
+
+```{r}
+  double_finder_res <- seu_s6@meta.data['doublet_finder'] # get the metadata column with singlet, doublet info
+  double_finder_res <- rownames_to_column(double_finder_res, "row_names") # add the cell IDs as new column to be able to merge correctly
+```
+
+```{r}
+double_finder_res
+```
+
+```{r}
+# 1. turn your tibble into a simple named vector
+df <- double_finder_res
+meta_vec <- df$doublet_finder
+names(meta_vec) <- df$row_names
+
+# 2. add it to your Seurat object
+seu_s6 <- AddMetaData(
+  object   = seu_s6,
+  metadata = meta_vec,
+  col.name = "doublet_finder"
+)
+
+# 3. check it
+head(seu_s6@meta.data["doublet_finder"])
+
+```
+
+
+
+###############################################################################################
+```{r}
+seu_s5 <- NormalizeData(seu_s5)
+seu_s5 <- FindVariableFeatures(seu_s5)
+seu_s5 <- ScaleData(seu_s5)
+seu_s5 <- RunPCA(seu_s5, nfeatures.print = 10)
+
+
+  # Find significant PCs
+  stdv <- seu_s5[["pca"]]@stdev
+  percent_stdv <- (stdv/sum(stdv)) * 100
+  cumulative <- cumsum(percent_stdv)
+  co1 <- which(cumulative > 90 & percent_stdv < 5)[1] 
+  co2 <- sort(which((percent_stdv[1:length(percent_stdv) - 1] - 
+                       percent_stdv[2:length(percent_stdv)]) > 0.1), 
+              decreasing = T)[1] + 1
+  min_pc <- min(co1, co2)
+
+min_pc
+
+```
+
+
+
+```{r}
+  # Finish pre-processing with min_pc
+  seu_s5 <- RunUMAP(seu_s5, dims = 1:min_pc)
+  seu_s5 <- FindNeighbors(object = seu_s5, dims = 1:min_pc)              
+  seu_s5 <- FindClusters(object = seu_s5, resolution = 0.1)
+```
+
+#neighbourhood size (pK)
+
+```{r}
+  # pK identification (no ground-truth) 
+  #introduces artificial doublets in varying props, merges with real data set and 
+  # preprocesses the data + calculates the prop of artficial neighrest neighbours, 
+  # provides a list of the proportion of artificial nearest neighbours for varying
+  # combinations of the pN and pK
+library(DoubletFinder)
+  sweep_list <- paramSweep(seu_s5, PCs = 1:min_pc, sct = FALSE)   
+  sweep_stats <- summarizeSweep(sweep_list)
+  bcmvn <- find.pK(sweep_stats) # computes a metric to find the optimal pK value (max mean variance 
+  optimal.pk <- bcmvn %>% 
+    dplyr::filter(BCmetric == max(BCmetric)) %>%
+    dplyr::select(pK)
+  optimal.pk <- as.numeric(as.character(optimal.pk[[1]]))
+```
+
+#Number of expected real doublets, nExp (homotypic doublets)
+
+```{r}
+  # Homotypic doublet proportion estimate
+  annotations <- seu_s5@meta.data$seurat_clusters # use the clusters as the user-defined cell types
+  homotypic.prop <- modelHomotypic(annotations) # get proportions of homotypic doublets
+```
+
+```{r}
+
+    
+    # 10X multiplet rates table
+    #https://rpubs.com/kenneditodd/doublet_finder_example
+multiplet_rates_10x <- data.frame('Multiplet_rate'= c(0.004, 0.008, 0.0160, 0.023, 0.031, 0.039, 0.046, 0.054, 0.061, 0.069, 0.076),
+                                      'Loaded_cells' = c(800, 1600, 3200, 4800, 6400, 8000, 9600, 11200, 12800, 14400, 16000),
+                                      'Recovered_cells' = c(500, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000))
+    
+    print(multiplet_rates_10x)
+    
+    multiplet_rate <- multiplet_rates_10x %>% dplyr::filter(Recovered_cells < nrow(seu_s5@meta.data)) %>% 
+      dplyr::slice(which.max(Recovered_cells)) %>% # select the min threshold depending on your number of samples
+      dplyr::select(Multiplet_rate) %>% as.numeric(as.character()) # get the expected multiplet rate for that number of recovered cells
+    
+    print(paste('Setting multiplet rate to', multiplet_rate))
+
+  
+```
+
+```{r}
+  nExp.poi <- round(multiplet_rate * nrow(seu_s5@meta.data)) # multiply by number of cells to get the number of expected multiplets
+  nExp.poi.adj <- round(nExp.poi * (1 - homotypic.prop)) # expected number of doublets
+```
+
+### Run doubletfinder
+
+```{r}
+  # run DoubletFinder
+  seu_s5 <- doubletFinder(seu = seu_s5, 
+                          PCs = 1:min_pc, 
+                          pK = optimal.pk, # the neighborhood size used to compute the number of artificial nearest neighbours
+                          nExp = nExp.poi.adj) # number of expected real doublets
+  # change name of metadata column with Singlet/Doublet information
+  colnames(seu_s5@meta.data)[grepl('DF.classifications.*', colnames(seu_s5@meta.data))] <- "doublet_finder"
+
+```
+
+```{r}
+  double_finder_res <- seu_s5@meta.data['doublet_finder'] # get the metadata column with singlet, doublet info
+  double_finder_res <- rownames_to_column(double_finder_res, "row_names") # add the cell IDs as new column to be able to merge correctly
+```
+
+```{r}
+double_finder_res
+```
+
+```{r}
+# 1. turn your tibble into a simple named vector
+df <- double_finder_res
+meta_vec <- df$doublet_finder
+names(meta_vec) <- df$row_names
+
+# 2. add it to your Seurat object
+seu_s5 <- AddMetaData(
+  object   = seu_s5,
+  metadata = meta_vec,
+  col.name = "doublet_finder"
+)
+
+# 3. check it
+head(seu_s5@meta.data["doublet_finder"])
+```
+
+###############################################################################################
+
+
+```{r}
+seu_s4 <- NormalizeData(seu_s4)
+seu_s4 <- FindVariableFeatures(seu_s4)
+seu_s4 <- ScaleData(seu_s4)
+seu_s4 <- RunPCA(seu_s4, nfeatures.print = 10)
+
+
+  # Find significant PCs
+  stdv <- seu_s4[["pca"]]@stdev
+  percent_stdv <- (stdv/sum(stdv)) * 100
+  cumulative <- cumsum(percent_stdv)
+  co1 <- which(cumulative > 90 & percent_stdv < 5)[1] 
+  co2 <- sort(which((percent_stdv[1:length(percent_stdv) - 1] - 
+                       percent_stdv[2:length(percent_stdv)]) > 0.1), 
+              decreasing = T)[1] + 1
+  min_pc <- min(co1, co2)
+
+min_pc
+
+```
+
+
+
+```{r}
+  # Finish pre-processing with min_pc
+  seu_s4 <- RunUMAP(seu_s4, dims = 1:min_pc)
+  seu_s4 <- FindNeighbors(object = seu_s4, dims = 1:min_pc)              
+  seu_s4 <- FindClusters(object = seu_s4, resolution = 0.1)
+```
+
+#neighbourhood size (pK)
+
+```{r}
+  # pK identification (no ground-truth) 
+  #introduces artificial doublets in varying props, merges with real data set and 
+  # preprocesses the data + calculates the prop of artficial neighrest neighbours, 
+  # provides a list of the proportion of artificial nearest neighbours for varying
+  # combinations of the pN and pK
+library(DoubletFinder)
+  sweep_list <- paramSweep(seu_s4, PCs = 1:min_pc, sct = FALSE)   
+  sweep_stats <- summarizeSweep(sweep_list)
+  bcmvn <- find.pK(sweep_stats) # computes a metric to find the optimal pK value (max mean variance 
+  optimal.pk <- bcmvn %>% 
+    dplyr::filter(BCmetric == max(BCmetric)) %>%
+    dplyr::select(pK)
+  optimal.pk <- as.numeric(as.character(optimal.pk[[1]]))
+```
+
+#Number of expected real doublets, nExp (homotypic doublets)
+
+```{r}
+  # Homotypic doublet proportion estimate
+  annotations <- seu_s8@meta.data$seurat_clusters # use the clusters as the user-defined cell types
+  homotypic.prop <- modelHomotypic(annotations) # get proportions of homotypic doublets
+```
+
+```{r}
+
+    
+    # 10X multiplet rates table
+    #https://rpubs.com/kenneditodd/doublet_finder_example
+multiplet_rates_10x <- data.frame('Multiplet_rate'= c(0.004, 0.008, 0.0160, 0.023, 0.031, 0.039, 0.046, 0.054, 0.061, 0.069, 0.076),
+                                      'Loaded_cells' = c(800, 1600, 3200, 4800, 6400, 8000, 9600, 11200, 12800, 14400, 16000),
+                                      'Recovered_cells' = c(500, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000))
+    
+    print(multiplet_rates_10x)
+    
+    multiplet_rate <- multiplet_rates_10x %>% dplyr::filter(Recovered_cells < nrow(seu_s8@meta.data)) %>% 
+      dplyr::slice(which.max(Recovered_cells)) %>% # select the min threshold depending on your number of samples
+      dplyr::select(Multiplet_rate) %>% as.numeric(as.character()) # get the expected multiplet rate for that number of recovered cells
+    
+    print(paste('Setting multiplet rate to', multiplet_rate))
+
+  
+```
+
+```{r}
+  nExp.poi <- round(multiplet_rate * nrow(seu_s4@meta.data)) # multiply by number of cells to get the number of expected multiplets
+  nExp.poi.adj <- round(nExp.poi * (1 - homotypic.prop)) # expected number of doublets
+```
+
+### Run doubletfinder
+
+```{r}
+  # run DoubletFinder
+  seu_s4 <- doubletFinder(seu = seu_s4, 
+                          PCs = 1:min_pc, 
+                          pK = optimal.pk, # the neighborhood size used to compute the number of artificial nearest neighbours
+                          nExp = nExp.poi.adj) # number of expected real doublets
+  # change name of metadata column with Singlet/Doublet information
+  colnames(seu_s4@meta.data)[grepl('DF.classifications.*', colnames(seu_s4@meta.data))] <- "doublet_finder"
+
+```
+
+```{r}
+  double_finder_res <- seu_s4@meta.data['doublet_finder'] # get the metadata column with singlet, doublet info
+  double_finder_res <- rownames_to_column(double_finder_res, "row_names") # add the cell IDs as new column to be able to merge correctly
+```
+
+```{r}
+double_finder_res
+```
+
+```{r}
+# 1. turn your tibble into a simple named vector
+df <- double_finder_res
+meta_vec <- df$doublet_finder
+names(meta_vec) <- df$row_names
+
+# 2. add it to your Seurat object
+seu_s4 <- AddMetaData(
+  object   = seu_s4,
+  metadata = meta_vec,
+  col.name = "doublet_finder"
+)
+
+# 3. check it
+head(seu_s4@meta.data["doublet_finder"])
+```
+
+#############################################################################################
+```{r}
+seu_s3 <- NormalizeData(seu_s3)
+seu_s3 <- FindVariableFeatures(seu_s3)
+seu_s3 <- ScaleData(seu_s3)
+seu_s3 <- RunPCA(seu_s3, nfeatures.print = 10)
+
+
+  # Find significant PCs
+  stdv <- seu_s3[["pca"]]@stdev
+  percent_stdv <- (stdv/sum(stdv)) * 100
+  cumulative <- cumsum(percent_stdv)
+  co1 <- which(cumulative > 90 & percent_stdv < 5)[1] 
+  co2 <- sort(which((percent_stdv[1:length(percent_stdv) - 1] - 
+                       percent_stdv[2:length(percent_stdv)]) > 0.1), 
+              decreasing = T)[1] + 1
+  min_pc <- min(co1, co2)
+
+min_pc
+
+```
+
+
+
+```{r}
+  # Finish pre-processing with min_pc
+  seu_s3 <- RunUMAP(seu_s3, dims = 1:min_pc)
+  seu_s3 <- FindNeighbors(object = seu_s3, dims = 1:min_pc)              
+  seu_s3 <- FindClusters(object = seu_s3, resolution = 0.1)
+```
+
+#neighbourhood size (pK)
+
+```{r}
+  # pK identification (no ground-truth) 
+  #introduces artificial doublets in varying props, merges with real data set and 
+  # preprocesses the data + calculates the prop of artficial neighrest neighbours, 
+  # provides a list of the proportion of artificial nearest neighbours for varying
+  # combinations of the pN and pK
+library(DoubletFinder)
+  sweep_list <- paramSweep(seu_s3, PCs = 1:min_pc, sct = FALSE)   
+  sweep_stats <- summarizeSweep(sweep_list)
+  bcmvn <- find.pK(sweep_stats) # computes a metric to find the optimal pK value (max mean variance 
+  optimal.pk <- bcmvn %>% 
+    dplyr::filter(BCmetric == max(BCmetric)) %>%
+    dplyr::select(pK)
+  optimal.pk <- as.numeric(as.character(optimal.pk[[1]]))
+```
+
+#Number of expected real doublets, nExp (homotypic doublets)
+
+```{r}
+  # Homotypic doublet proportion estimate
+  annotations <- seu_s3@meta.data$seurat_clusters # use the clusters as the user-defined cell types
+  homotypic.prop <- modelHomotypic(annotations) # get proportions of homotypic doublets
+```
+
+```{r}
+
+    
+    # 10X multiplet rates table
+    #https://rpubs.com/kenneditodd/doublet_finder_example
+multiplet_rates_10x <- data.frame('Multiplet_rate'= c(0.004, 0.008, 0.0160, 0.023, 0.031, 0.039, 0.046, 0.054, 0.061, 0.069, 0.076),
+                                      'Loaded_cells' = c(800, 1600, 3200, 4800, 6400, 8000, 9600, 11200, 12800, 14400, 16000),
+                                      'Recovered_cells' = c(500, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000))
+    
+    print(multiplet_rates_10x)
+    
+    multiplet_rate <- multiplet_rates_10x %>% dplyr::filter(Recovered_cells < nrow(seu_s8@meta.data)) %>% 
+      dplyr::slice(which.max(Recovered_cells)) %>% # select the min threshold depending on your number of samples
+      dplyr::select(Multiplet_rate) %>% as.numeric(as.character()) # get the expected multiplet rate for that number of recovered cells
+    
+    print(paste('Setting multiplet rate to', multiplet_rate))
+
+  
+```
+
+```{r}
+  nExp.poi <- round(multiplet_rate * nrow(seu_s3@meta.data)) # multiply by number of cells to get the number of expected multiplets
+  nExp.poi.adj <- round(nExp.poi * (1 - homotypic.prop)) # expected number of doublets
+```
+
+### Run doubletfinder
+
+```{r}
+  # run DoubletFinder
+  seu_s3 <- doubletFinder(seu = seu_s3, 
+                          PCs = 1:min_pc, 
+                          pK = optimal.pk, # the neighborhood size used to compute the number of artificial nearest neighbours
+                          nExp = nExp.poi.adj) # number of expected real doublets
+  # change name of metadata column with Singlet/Doublet information
+  colnames(seu_s3@meta.data)[grepl('DF.classifications.*', colnames(seu_s3@meta.data))] <- "doublet_finder"
+
+```
+
+```{r}
+  double_finder_res <- seu_s3@meta.data['doublet_finder'] # get the metadata column with singlet, doublet info
+  double_finder_res <- rownames_to_column(double_finder_res, "row_names") # add the cell IDs as new column to be able to merge correctly
+```
+
+```{r}
+double_finder_res
+```
+
+```{r}
+# 1. turn your tibble into a simple named vector
+df <- double_finder_res
+meta_vec <- df$doublet_finder
+names(meta_vec) <- df$row_names
+
+# 2. add it to your Seurat object
+seu_s3 <- AddMetaData(
+  object   = seu_s3,
+  metadata = meta_vec,
+  col.name = "doublet_finder"
+)
+
+# 3. check it
+head(seu_s3@meta.data["doublet_finder"])
+```
+
+
+
+###########################################################################################
+
+```{r}
+seu_s2 <- NormalizeData(seu_s2)
+seu_s2 <- FindVariableFeatures(seu_s2)
+seu_s2 <- ScaleData(seu_s2)
+seu_s2 <- RunPCA(seu_s2, nfeatures.print = 10)
+
+
+  # Find significant PCs
+  stdv <- seu_s2[["pca"]]@stdev
+  percent_stdv <- (stdv/sum(stdv)) * 100
+  cumulative <- cumsum(percent_stdv)
+  co1 <- which(cumulative > 90 & percent_stdv < 5)[1] 
+  co2 <- sort(which((percent_stdv[1:length(percent_stdv) - 1] - 
+                       percent_stdv[2:length(percent_stdv)]) > 0.1), 
+              decreasing = T)[1] + 1
+  min_pc <- min(co1, co2)
+
+min_pc
+
+```
+
+
+
+```{r}
+  # Finish pre-processing with min_pc
+  seu_s2 <- RunUMAP(seu_s2, dims = 1:min_pc)
+  seu_s2 <- FindNeighbors(object = seu_s2, dims = 1:min_pc)              
+  seu_s2 <- FindClusters(object = seu_s2, resolution = 0.1)
+```
+
+#neighbourhood size (pK)
+
+```{r}
+  # pK identification (no ground-truth) 
+  #introduces artificial doublets in varying props, merges with real data set and 
+  # preprocesses the data + calculates the prop of artficial neighrest neighbours, 
+  # provides a list of the proportion of artificial nearest neighbours for varying
+  # combinations of the pN and pK
+library(DoubletFinder)
+  sweep_list <- paramSweep(seu_s2, PCs = 1:min_pc, sct = FALSE)   
+  sweep_stats <- summarizeSweep(sweep_list)
+  bcmvn <- find.pK(sweep_stats) # computes a metric to find the optimal pK value (max mean variance 
+  optimal.pk <- bcmvn %>% 
+    dplyr::filter(BCmetric == max(BCmetric)) %>%
+    dplyr::select(pK)
+  optimal.pk <- as.numeric(as.character(optimal.pk[[1]]))
+```
+
+#Number of expected real doublets, nExp (homotypic doublets)
+
+```{r}
+  # Homotypic doublet proportion estimate
+  annotations <- seu_s2@meta.data$seurat_clusters # use the clusters as the user-defined cell types
+  homotypic.prop <- modelHomotypic(annotations) # get proportions of homotypic doublets
+```
+
+```{r}
+
+    
+    # 10X multiplet rates table
+    #https://rpubs.com/kenneditodd/doublet_finder_example
+multiplet_rates_10x <- data.frame('Multiplet_rate'= c(0.004, 0.008, 0.0160, 0.023, 0.031, 0.039, 0.046, 0.054, 0.061, 0.069, 0.076),
+                                      'Loaded_cells' = c(800, 1600, 3200, 4800, 6400, 8000, 9600, 11200, 12800, 14400, 16000),
+                                      'Recovered_cells' = c(500, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000))
+    
+    print(multiplet_rates_10x)
+    
+    multiplet_rate <- multiplet_rates_10x %>% dplyr::filter(Recovered_cells < nrow(seu_s8@meta.data)) %>% 
+      dplyr::slice(which.max(Recovered_cells)) %>% # select the min threshold depending on your number of samples
+      dplyr::select(Multiplet_rate) %>% as.numeric(as.character()) # get the expected multiplet rate for that number of recovered cells
+    
+    print(paste('Setting multiplet rate to', multiplet_rate))
+
+  
+```
+
+```{r}
+  nExp.poi <- round(multiplet_rate * nrow(seu_s2@meta.data)) # multiply by number of cells to get the number of expected multiplets
+  nExp.poi.adj <- round(nExp.poi * (1 - homotypic.prop)) # expected number of doublets
+```
+
+### Run doubletfinder
+
+```{r}
+  # run DoubletFinder
+  seu_s2 <- doubletFinder(seu = seu_s2, 
+                          PCs = 1:min_pc, 
+                          pK = optimal.pk, # the neighborhood size used to compute the number of artificial nearest neighbours
+                          nExp = nExp.poi.adj) # number of expected real doublets
+  # change name of metadata column with Singlet/Doublet information
+  colnames(seu_s2@meta.data)[grepl('DF.classifications.*', colnames(seu_s2@meta.data))] <- "doublet_finder"
+
+```
+
+```{r}
+  double_finder_res <- seu_s2@meta.data['doublet_finder'] # get the metadata column with singlet, doublet info
+  double_finder_res <- rownames_to_column(double_finder_res, "row_names") # add the cell IDs as new column to be able to merge correctly
+```
+
+```{r}
+double_finder_res
+```
+
+```{r}
+# 1. turn your tibble into a simple named vector
+df <- double_finder_res
+meta_vec <- df$doublet_finder
+names(meta_vec) <- df$row_names
+
+# 2. add it to your Seurat object
+seu_s2 <- AddMetaData(
+  object   = seu_s2,
+  metadata = meta_vec,
+  col.name = "doublet_finder"
+)
+
+# 3. check it
+head(seu_s2@meta.data["doublet_finder"])
+```
+
+
+
+############################################################################################
+```{r}
+seu_s1 <- NormalizeData(seu_s1)
+seu_s1 <- FindVariableFeatures(seu_s1)
+seu_s1 <- ScaleData(seu_s1)
+seu_s1 <- RunPCA(seu_s1, nfeatures.print = 10)
+
+
+  # Find significant PCs
+  stdv <- seu_s1[["pca"]]@stdev
+  percent_stdv <- (stdv/sum(stdv)) * 100
+  cumulative <- cumsum(percent_stdv)
+  co1 <- which(cumulative > 90 & percent_stdv < 5)[1] 
+  co2 <- sort(which((percent_stdv[1:length(percent_stdv) - 1] - 
+                       percent_stdv[2:length(percent_stdv)]) > 0.1), 
+              decreasing = T)[1] + 1
+  min_pc <- min(co1, co2)
+
+min_pc
+
+```
+
+
+
+```{r}
+  # Finish pre-processing with min_pc
+  seu_s1 <- RunUMAP(seu_s1, dims = 1:min_pc)
+  seu_s1 <- FindNeighbors(object = seu_s1, dims = 1:min_pc)              
+  seu_s1 <- FindClusters(object = seu_s1, resolution = 0.1)
+```
+
+#neighbourhood size (pK)
+
+```{r}
+  # pK identification (no ground-truth) 
+  #introduces artificial doublets in varying props, merges with real data set and 
+  # preprocesses the data + calculates the prop of artficial neighrest neighbours, 
+  # provides a list of the proportion of artificial nearest neighbours for varying
+  # combinations of the pN and pK
+library(DoubletFinder)
+  sweep_list <- paramSweep(seu_s1, PCs = 1:min_pc, sct = FALSE)   
+  sweep_stats <- summarizeSweep(sweep_list)
+  bcmvn <- find.pK(sweep_stats) # computes a metric to find the optimal pK value (max mean variance 
+  optimal.pk <- bcmvn %>% 
+    dplyr::filter(BCmetric == max(BCmetric)) %>%
+    dplyr::select(pK)
+  optimal.pk <- as.numeric(as.character(optimal.pk[[1]]))
+```
+
+#Number of expected real doublets, nExp (homotypic doublets)
+
+```{r}
+  # Homotypic doublet proportion estimate
+  annotations <- seu_s1@meta.data$seurat_clusters # use the clusters as the user-defined cell types
+  homotypic.prop <- modelHomotypic(annotations) # get proportions of homotypic doublets
+```
+
+```{r}
+
+    
+    # 10X multiplet rates table
+    #https://rpubs.com/kenneditodd/doublet_finder_example
+multiplet_rates_10x <- data.frame('Multiplet_rate'= c(0.004, 0.008, 0.0160, 0.023, 0.031, 0.039, 0.046, 0.054, 0.061, 0.069, 0.076),
+                                      'Loaded_cells' = c(800, 1600, 3200, 4800, 6400, 8000, 9600, 11200, 12800, 14400, 16000),
+                                      'Recovered_cells' = c(500, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000))
+    
+    print(multiplet_rates_10x)
+    
+    multiplet_rate <- multiplet_rates_10x %>% dplyr::filter(Recovered_cells < nrow(seu_s8@meta.data)) %>% 
+      dplyr::slice(which.max(Recovered_cells)) %>% # select the min threshold depending on your number of samples
+      dplyr::select(Multiplet_rate) %>% as.numeric(as.character()) # get the expected multiplet rate for that number of recovered cells
+    
+    print(paste('Setting multiplet rate to', multiplet_rate))
+```
+
+```{r}
+  nExp.poi <- round(multiplet_rate * nrow(seu_s1@meta.data)) # multiply by number of cells to get the number of expected multiplets
+  nExp.poi.adj <- round(nExp.poi * (1 - homotypic.prop)) # expected number of doublets
+```
+
+### Run doubletfinder
+
+```{r}
+  # run DoubletFinder
+  seu_s1 <- doubletFinder(seu = seu_s1, 
+                          PCs = 1:min_pc, 
+                          pK = optimal.pk, # the neighborhood size used to compute the number of artificial nearest neighbours
+                          nExp = nExp.poi.adj) # number of expected real doublets
+  # change name of metadata column with Singlet/Doublet information
+  colnames(seu_s1@meta.data)[grepl('DF.classifications.*', colnames(seu_s1@meta.data))] <- "doublet_finder"
+
+```
+
+```{r}
+
+seu_s1@meta.data
+
+
+
+
+  double_finder_res <- seu_s1@meta.data['doublet_finder'] # get the metadata column with singlet, doublet info
+
+ double_finder_res <- rownames_to_column(double_finder_res, "row_names") # add the cell IDs as new column to be able to merge correctly
+```
+
+```{r}
+
+
+
+double_finder_res
+
+
+```
+
+```{r}
+# 1. turn your tibble into a simple named vector
+df <- double_finder_res
+meta_vec <- df$doublet_finder
+names(meta_vec) <- df$row_names
+
+# 2. add it to your Seurat object
+seu_s1 <- AddMetaData(
+  object   = seu_s1,
+  metadata = meta_vec,
+  col.name = "doublet_finder"
+)
+
+# 3. check it
+head(seu_s1@meta.data["doublet_finder"])
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+###################################################################################### merge 
+```{r}
+merged_all <- merge(
+  x            = seu_s1,                        # first object
+  y            = list(seu_s2, seu_s3, seu_s4,
+                      seu_s5, seu_s6, seu_s7, seu_s8),  # the rest as a list
+  project      = "AllSamples"
+)
+
+
+saveRDS(merged_all,file="merged_samples_2.rds")
+
+
+
+
+
+```
+
+```{r}
+head(merged_all)
+```
+
+
+
+
+```{r}
+#meta_df <- merged_all@meta.data(((())))
+#write.table(
+ # meta_df,
+ # file      = "seu_metadata.tsv",
+ # sep       = "\t",
+#  quote     = FALSE,
+ # row.names = TRUE,
+ # col.names = NA
+#)
+
+```
+
+
